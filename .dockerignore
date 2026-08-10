@@ -1,0 +1,12 @@
+config.yaml
+.git
+.gitignore
+*.md
+chart/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+.env
+.env.*

@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cursor-openai-bridge.fullname" . }}
+  labels:
+    {{- include "cursor-openai-bridge.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "cursor-openai-bridge.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cursor-openai-bridge.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "cursor-openai-bridge.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      containers:
+        - name: bridge
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.bridge.port }}
+              protocol: TCP
+          env:
+            - name: HOST
+              value: {{ .Values.bridge.host | quote }}
+            - name: PORT
+              value: {{ .Values.bridge.port | quote }}
+            - name: CURSOR_BRIDGE_MODE
+              value: {{ .Values.bridge.mode | quote }}
+            - name: CURSOR_BRIDGE_CHAT_ONLY
+              value: {{ .Values.bridge.chatOnly | quote }}
+            - name: CURSOR_AGENT_BIN
+              value: {{ .Values.bridge.agentBin | quote }}
+            - name: CURSOR_BRIDGE_AGENT_TIMEOUT
+              value: {{ .Values.bridge.agentTimeoutSeconds | quote }}
+            - name: CURSOR_BRIDGE_MAX_CONCURRENT
+              value: {{ .Values.bridge.maxConcurrent | quote }}
+            {{- if .Values.bridge.workspace }}
+            - name: CURSOR_BRIDGE_WORKSPACE
+              value: {{ .Values.bridge.workspace | quote }}
+            {{- end }}
+            - name: CURSOR_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cursor-openai-bridge.secretName" . }}
+                  key: {{ .Values.cursor.existingSecretKey }}
+            - name: HOME
+              value: /home/appuser
+            - name: PATH
+              value: /home/appuser/.local/bin:/usr/local/bin:/usr/bin:/bin
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: home-tmp
+              mountPath: /home/appuser/.cursor
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: home-tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

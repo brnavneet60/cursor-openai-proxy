@@ -1,0 +1,14 @@
+apiVersion: v2
+name: cursor-openai-bridge
+description: OpenAI-compatible chat completions proxy backed by Cursor Agent CLI (cursor-openai-proxy)
+type: application
+version: 0.1.3
+appVersion: "0.1.3"
+keywords:
+  - cursor
+  - openai
+  - llm
+  - proxy
+  - bridge
+maintainers:
+  - name: kaif

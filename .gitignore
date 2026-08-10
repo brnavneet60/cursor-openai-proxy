@@ -1,0 +1,17 @@
+config.yaml
+*.pem
+.env
+.env.*
+.venv/
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+.idea/
+.vscode/
+*.egg-info/
+dist/
+build/
+.coverage
+htmlcov/
+.pytest_cache/

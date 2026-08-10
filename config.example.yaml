@@ -1,0 +1,27 @@
+# Cursor OpenAI Proxy — example configuration
+# Copy to config.yaml and fill in your key (config.yaml is gitignored).
+#
+#   cp config.example.yaml config.yaml
+#
+# Key: https://cursor.com/dashboard/integrations
+
+cursor_api_key: "cursor_REPLACE_ME"
+
+# Server bind (use 0.0.0.0 in Docker/K8s; env HOST overrides)
+host: "127.0.0.1"
+port: 8765
+
+# Cursor CLI binary name or absolute path
+agent_bin: "agent"
+
+# Default agent mode: ask | plan | agent
+mode: "ask"
+
+# Optional fixed workspace. Leave empty to use chat_only / cwd rules.
+workspace: ""
+
+# true = each request runs in an empty temp dir (no project file access)
+chat_only: true
+
+# Max seconds to wait for Cursor agent CLI per request
+agent_timeout_seconds: 120

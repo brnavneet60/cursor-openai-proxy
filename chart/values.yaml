@@ -1,0 +1,100 @@
+# Default values for cursor-openai-bridge.
+
+replicaCount: 1
+
+image:
+  # docker build -t cursor-openai-proxy:0.1.3 .
+  # kind load docker-image cursor-openai-proxy:0.1.3
+  repository: cursor-openai-proxy
+  tag: "0.1.3"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  fsGroup: 10001
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false
+
+service:
+  type: ClusterIP
+  port: 8765
+  # Optional NodePort when type=NodePort
+  nodePort: null
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: cursor-bridge.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  # Sized for small local clusters (Rancher Desktop / kind). Raise for production.
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Cursor bridge settings (non-secret)
+bridge:
+  host: "0.0.0.0"
+  port: 8765
+  mode: ask
+  chatOnly: true
+  agentBin: agent
+  agentTimeoutSeconds: 120
+  maxConcurrent: 1
+  # Optional fixed workspace path inside the container
+  workspace: ""
+
+# API key — do NOT commit real values.
+# Prefer: --set-file cursor.apiKey=/path/to/key.txt
+# Or:     --set cursor.apiKey=$CURSOR_API_KEY
+# Or:     cursor.existingSecret
+cursor:
+  apiKey: ""
+  existingSecret: ""
+  existingSecretKey: cursor-api-key
+
+probes:
+  liveness:
+    initialDelaySeconds: 15
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+# Agent completions can run a long time
+terminationGracePeriodSeconds: 120

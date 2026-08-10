@@ -1,0 +1,19 @@
+1. Bridge Service:
+  export SVC={{ include "cursor-openai-bridge.fullname" . }}
+  export NS={{ .Release.Namespace }}
+
+2. Port-forward (local smoke):
+  kubectl -n $NS port-forward svc/$SVC {{ .Values.service.port }}:{{ .Values.service.port }}
+
+3. Health:
+  curl -sS http://127.0.0.1:{{ .Values.service.port }}/health | jq .
+
+4. Chat completion:
+  curl -sS http://127.0.0.1:{{ .Values.service.port }}/v1/chat/completions \
+    -H 'Content-Type: application/json' \
+    -d '{"model":"auto","messages":[{"role":"user","content":"Say hi in one sentence"}]}'
+
+In-cluster OpenAI base URL:
+  http://{{ include "cursor-openai-bridge.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}/v1
+
+Pods need egress to Cursor cloud APIs for the agent CLI to work.
