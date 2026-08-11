@@ -20,8 +20,18 @@ mode: "ask"
 # Optional fixed workspace. Leave empty to use chat_only / cwd rules.
 workspace: ""
 
-# true = each request runs in an empty temp dir (no project file access)
+# true = use a process-lifetime empty chat dir (no project file access)
 chat_only: true
 
-# Max seconds to wait for Cursor agent CLI per request
+# Backend: sdk (Cursor Python SDK local, default) | cli (agent -p subprocess)
+backend: "sdk"
+
+# Keep Cursor worker-server processes between CLI requests (cli backend only).
+reuse_workers: true
+force_kill_workers: false
+
+# Max concurrent agent runs
+max_concurrent: 1
+
+# Max seconds to wait for Cursor agent CLI per request (cli backend)
 agent_timeout_seconds: 120

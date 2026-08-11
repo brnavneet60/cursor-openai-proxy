@@ -1,0 +1,23 @@
+{
+  "path": "direct-port-forward-bridge",
+  "note": "clean; no concurrent gateway load",
+  "runs": [
+    {
+      "total_ms": 10645.265708,
+      "completion_tokens": 35,
+      "tok_per_s": 3.28784653761129
+    },
+    {
+      "total_ms": 11546.748249999997,
+      "completion_tokens": 28,
+      "tok_per_s": 2.424925129895337
+    },
+    {
+      "total_ms": 10659.379875000006,
+      "completion_tokens": 35,
+      "tok_per_s": 3.283493074685077
+    }
+  ],
+  "mean_ms": 10950.464611000001,
+  "mean_tps": 2.9987549140639014
+}

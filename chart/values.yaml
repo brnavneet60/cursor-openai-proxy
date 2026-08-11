@@ -3,10 +3,10 @@
 replicaCount: 1
 
 image:
-  # docker build -t cursor-openai-proxy:0.1.3 .
-  # kind load docker-image cursor-openai-proxy:0.1.3
+  # docker build -t cursor-openai-proxy:0.2.0 .
+  # kind load docker-image cursor-openai-proxy:0.2.0
   repository: cursor-openai-proxy
-  tag: "0.1.3"
+  tag: "0.2.0"
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
@@ -69,10 +69,13 @@ bridge:
   port: 8765
   mode: ask
   chatOnly: true
+  # sdk = Cursor Python SDK local (in-pod); cli = agent -p subprocess
+  backend: sdk
   agentBin: agent
   agentTimeoutSeconds: 120
   maxConcurrent: 1
-  # Optional fixed workspace path inside the container
+  reuseWorkers: true
+  forceKillWorkers: false
   workspace: ""
 
 # API key — do NOT commit real values.

@@ -1,0 +1,9 @@
+{
+  "total_ms": 12356.733959,
+  "content": "ROOT_CAUSE: AgentgatewayPolicy enforces a 3 req/min limit with burst 1 on /v1, so POST /v1/chat/completions exceeds the quota and returns HTTP 429.\nCONFIRM: kubectl get agentgatewaypolicy -A -o yaml | grep -A20 -E 'rateLimit|/v1'\nFIX: Raise the AgentgatewayPolicy rate limit (and burst) on /v1 enough for expected chat/completions traffic, then apply the updated policy.\nWORKAROUND: Space client requests under 3/min or temporarily remove/bypass that policy while you update it.",
+  "usage": {
+    "prompt_tokens": 176,
+    "completion_tokens": 119,
+    "total_tokens": 295
+  }
+}

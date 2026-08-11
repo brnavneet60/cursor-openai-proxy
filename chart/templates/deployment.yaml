@@ -48,12 +48,18 @@ spec:
               value: {{ .Values.bridge.mode | quote }}
             - name: CURSOR_BRIDGE_CHAT_ONLY
               value: {{ .Values.bridge.chatOnly | quote }}
+            - name: CURSOR_BRIDGE_BACKEND
+              value: {{ .Values.bridge.backend | default "sdk" | quote }}
             - name: CURSOR_AGENT_BIN
               value: {{ .Values.bridge.agentBin | quote }}
             - name: CURSOR_BRIDGE_AGENT_TIMEOUT
               value: {{ .Values.bridge.agentTimeoutSeconds | quote }}
             - name: CURSOR_BRIDGE_MAX_CONCURRENT
               value: {{ .Values.bridge.maxConcurrent | quote }}
+            - name: CURSOR_BRIDGE_REUSE_WORKERS
+              value: {{ .Values.bridge.reuseWorkers | quote }}
+            - name: CURSOR_BRIDGE_FORCE_KILL_WORKERS
+              value: {{ .Values.bridge.forceKillWorkers | quote }}
             {{- if .Values.bridge.workspace }}
             - name: CURSOR_BRIDGE_WORKSPACE
               value: {{ .Values.bridge.workspace | quote }}

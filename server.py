@@ -1,5 +1,9 @@
 """
-Cursor OpenAI Proxy — OpenAI-compatible chat API backed by Cursor Agent CLI.
+Cursor OpenAI Proxy — OpenAI-compatible chat API backed by Cursor.
+
+Backends:
+  - sdk (default): Cursor Python SDK local runtime in-process/pod
+  - cli: Cursor Agent CLI (`agent -p`) subprocess
 
 Exposes:
   GET  /health
@@ -7,19 +11,24 @@ Exposes:
   POST /v1/chat/completions
 
 Auth: config.yaml / CURSOR_API_KEY / Authorization bearer.
+SDK: https://cursor.com/docs/sdk/python
 CLI: https://cursor.com/docs/cli/overview
 """
 
 from __future__ import annotations
 
+import atexit
 import asyncio
 import json
+import logging
 import os
+import re
 import shutil
 import tempfile
 import time
 import uuid
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +39,9 @@ from pydantic import BaseModel
 
 BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = Path(os.environ.get("CURSOR_BRIDGE_CONFIG", str(BASE_DIR / "config.yaml")))
+APP_VERSION = "0.2.0"
+
+logger = logging.getLogger("cursor-openai-proxy")
 
 
 def load_config(path: Path = CONFIG_PATH) -> dict[str, Any]:
@@ -88,11 +100,51 @@ DEFAULT_MODE = _cfg_str("mode", "CURSOR_BRIDGE_MODE", "ask")  # ask | plan | age
 DEFAULT_WORKSPACE = _cfg_str("workspace", "CURSOR_BRIDGE_WORKSPACE", "")
 PORT = _cfg_int("port", "PORT", 8765)
 HOST = _cfg_str("host", "HOST", "127.0.0.1")
-# When true, run in a fresh empty temp dir (pure chat; no project tools).
+# When true, run in a stable empty chat dir (pure chat; no project tools).
 CHAT_ONLY = _cfg_bool("chat_only", "CURSOR_BRIDGE_CHAT_ONLY", True)
+# Keep Cursor worker-server processes between requests (latency win).
+REUSE_WORKERS = _cfg_bool("reuse_workers", "CURSOR_BRIDGE_REUSE_WORKERS", True)
+# Emergency: kill workers before every request (old cold-start behavior).
+FORCE_KILL_WORKERS = _cfg_bool(
+    "force_kill_workers", "CURSOR_BRIDGE_FORCE_KILL_WORKERS", False
+)
+MAX_CONCURRENT = _cfg_int("max_concurrent", "CURSOR_BRIDGE_MAX_CONCURRENT", 1)
+BACKEND = _cfg_str("backend", "CURSOR_BRIDGE_BACKEND", "sdk").lower()
+if BACKEND not in {"sdk", "cli"}:
+    raise RuntimeError(f"backend must be 'sdk' or 'cli', got {BACKEND!r}")
 CURSOR_API_KEY = cursor_api_key_from_config()
 
-app = FastAPI(title="cursor-openai-proxy", version="0.1.3")
+# Process-lifetime chat workspace (avoids per-request temp dir churn).
+_CHAT_WORKSPACE: Path | None = None
+_SDK_CLIENT: Any = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global _SDK_CLIENT
+    if BACKEND == "sdk":
+        from sdk_runtime import launch_sdk_client
+
+        ws = str(get_chat_workspace()) if CHAT_ONLY and not DEFAULT_WORKSPACE else (
+            os.path.abspath(DEFAULT_WORKSPACE) if DEFAULT_WORKSPACE else os.getcwd()
+        )
+        try:
+            _SDK_CLIENT = await launch_sdk_client(workspace=ws)
+            app.state.sdk_client = _SDK_CLIENT
+            logger.info("SDK local bridge ready workspace=%s", ws)
+        except Exception:
+            logger.exception("failed to launch Cursor SDK bridge")
+            raise
+    yield
+    if _SDK_CLIENT is not None:
+        try:
+            await _SDK_CLIENT.aclose()
+        except Exception:
+            logger.exception("error closing SDK client")
+        _SDK_CLIENT = None
+
+
+app = FastAPI(title="cursor-openai-proxy", version=APP_VERSION, lifespan=lifespan)
 
 
 class ChatMessage(BaseModel):
@@ -122,13 +174,43 @@ def _content_to_text(content: str | list[dict[str, Any]] | None) -> str:
     return "\n".join(parts)
 
 
+_PREAMBLE_RE = re.compile(
+    r"(?is)^\s*(?:"
+    r"(?:i(?:'|’)?ll|let\s+me|i\s+will)\s+"
+    r"(?:inspect|check|look\s+at|examine|search|explore)\b"
+    r".*?"
+    r"(?:\.|\n+)"
+    r")+"
+)
+
+
+def sanitize_assistant_text(text: str) -> str:
+    """Strip leading workspace-inspection / tool-narration preambles."""
+    if not text:
+        return text
+    cleaned = _PREAMBLE_RE.sub("", text, count=1).lstrip()
+    return cleaned if cleaned else text
+
+
+def estimate_tokens(text: str) -> int:
+    return max(1, len(text) // 4) if text else 0
+
+
 def messages_to_prompt(messages: list[ChatMessage]) -> str:
     """Flatten OpenAI chat messages into a single CLI prompt."""
     lines: list[str] = [
         "You are answering via an OpenAI-compatible HTTP bridge.",
-        "Reply with the final answer only — no tool narration unless asked.",
-        "",
+        "Reply with the final answer only.",
+        "Do not narrate tools, plans, or workspace inspection.",
+        "Do not say you will inspect/check the workspace.",
+        "Start your reply with the answer content immediately.",
     ]
+    if CHAT_ONLY:
+        lines.append(
+            "This session has no project files — answer from knowledge alone; "
+            "do not attempt to read or search a codebase."
+        )
+    lines.append("")
     for msg in messages:
         role = msg.role.upper()
         text = _content_to_text(msg.content).strip()
@@ -186,10 +268,12 @@ def agent_sem() -> asyncio.Semaphore:
     """Lazy semaphore bound to the running event loop (not import-time)."""
     global _AGENT_SEM
     if _AGENT_SEM is None:
-        _AGENT_SEM = asyncio.Semaphore(
-            int(os.environ.get("CURSOR_BRIDGE_MAX_CONCURRENT", "1"))
-        )
+        _AGENT_SEM = asyncio.Semaphore(max(1, MAX_CONCURRENT))
     return _AGENT_SEM
+
+
+def _should_kill_workers_before_run() -> bool:
+    return FORCE_KILL_WORKERS or not REUSE_WORKERS
 
 
 def _kill_stale_agent_workers() -> None:
@@ -220,7 +304,8 @@ def _run_agent_sync(cmd: list[str], env: dict[str, str]) -> tuple[int, str, str]
     """Run agent CLI in a worker thread (more reliable under uvicorn than raw asyncio)."""
     import subprocess
 
-    _kill_stale_agent_workers()
+    if _should_kill_workers_before_run():
+        _kill_stale_agent_workers()
     proc = subprocess.Popen(
         cmd,
         stdin=subprocess.DEVNULL,
@@ -240,8 +325,12 @@ def _run_agent_sync(cmd: list[str], env: dict[str, str]) -> tuple[int, str, str]
             pass
         proc.wait(timeout=5)
         raise TimeoutError(f"agent timed out after {AGENT_TIMEOUT_S}s") from None
+    returncode = int(proc.returncode or 0)
+    # On failure, clear workers so the next request starts clean.
+    if returncode != 0:
+        _kill_stale_agent_workers()
     return (
-        int(proc.returncode or 0),
+        returncode,
         stdout_b.decode("utf-8", errors="replace").strip(),
         stderr_b.decode("utf-8", errors="replace").strip(),
     )
@@ -305,10 +394,22 @@ def openai_completion_response(
     *,
     model: str,
     text: str,
+    prompt_text: str = "",
     completion_id: str | None = None,
+    usage: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     cid = completion_id or f"chatcmpl-{uuid.uuid4().hex[:24]}"
     created = int(time.time())
+    if usage and (usage.get("completion_tokens") or usage.get("prompt_tokens")):
+        ptok = int(usage.get("prompt_tokens") or 0)
+        ctok = int(usage.get("completion_tokens") or 0)
+        total = int(usage.get("total_tokens") or (ptok + ctok))
+        estimated = False
+    else:
+        ctok = estimate_tokens(text)
+        ptok = estimate_tokens(prompt_text)
+        total = ptok + ctok
+        estimated = True
     return {
         "id": cid,
         "object": "chat.completion",
@@ -322,10 +423,11 @@ def openai_completion_response(
             }
         ],
         "usage": {
-            "prompt_tokens": 0,
-            "completion_tokens": 0,
-            "total_tokens": 0,
+            "prompt_tokens": ptok,
+            "completion_tokens": ctok,
+            "total_tokens": total,
         },
+        "_token_estimate": estimated,
     }
 
 
@@ -388,6 +490,8 @@ async def stream_agent_sse(
     )
 
     async with agent_sem():
+        if _should_kill_workers_before_run():
+            await asyncio.to_thread(_kill_stale_agent_workers)
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdin=asyncio.subprocess.DEVNULL,
@@ -409,6 +513,7 @@ async def stream_agent_sse(
 
         stderr_task = asyncio.create_task(_drain_stderr())
         emitted_any = False
+        failed = False
 
         try:
             while True:
@@ -418,7 +523,9 @@ async def stream_agent_sse(
                         timeout=AGENT_TIMEOUT_S,
                     )
                 except TimeoutError:
+                    failed = True
                     _kill_process_group(proc)
+                    await asyncio.to_thread(_kill_stale_agent_workers)
                     yield sse_chunk(
                         model=model,
                         completion_id=completion_id,
@@ -440,17 +547,20 @@ async def stream_agent_sse(
 
                 delta_text = extract_assistant_delta_text(event)
                 if delta_text:
+                    piece = sanitize_assistant_text(delta_text) if not emitted_any else delta_text
+                    if not piece:
+                        continue
                     emitted_any = True
                     yield sse_chunk(
                         model=model,
                         completion_id=completion_id,
                         created=created,
-                        delta={"content": delta_text},
+                        delta={"content": piece},
                     )
                     continue
 
                 if event.get("type") == "result" and not emitted_any:
-                    result_text = str(event.get("result") or "")
+                    result_text = sanitize_assistant_text(str(event.get("result") or ""))
                     if result_text:
                         yield sse_chunk(
                             model=model,
@@ -466,6 +576,7 @@ async def stream_agent_sse(
             await stderr_task
 
         if proc.returncode not in (0, None) and proc.returncode != -9:
+            failed = True
             err = stderr_buf.decode("utf-8", errors="replace")[-2000:]
             yield sse_chunk(
                 model=model,
@@ -473,6 +584,8 @@ async def stream_agent_sse(
                 created=created,
                 delta={"content": f"\n\n[cursor-bridge error exit={proc.returncode}] {err}"},
             )
+        if failed:
+            await asyncio.to_thread(_kill_stale_agent_workers)
 
     yield sse_chunk(
         model=model,
@@ -484,9 +597,33 @@ async def stream_agent_sse(
     yield "data: [DONE]\n\n"
 
 
+def _cleanup_chat_workspace() -> None:
+    global _CHAT_WORKSPACE
+    if _CHAT_WORKSPACE is None:
+        return
+    try:
+        shutil.rmtree(_CHAT_WORKSPACE, ignore_errors=True)
+    finally:
+        _CHAT_WORKSPACE = None
+
+
+def get_chat_workspace() -> Path:
+    """Stable empty workspace for chat_only mode (process lifetime)."""
+    global _CHAT_WORKSPACE
+    if _CHAT_WORKSPACE is not None and _CHAT_WORKSPACE.is_dir():
+        return _CHAT_WORKSPACE
+    root = Path(tempfile.gettempdir()) / "cursor-openai-bridge-chat"
+    root.mkdir(parents=True, exist_ok=True)
+    # Marker so operators can identify the dir.
+    (root / ".cursor-openai-bridge").write_text(APP_VERSION + "\n", encoding="utf-8")
+    _CHAT_WORKSPACE = root
+    atexit.register(_cleanup_chat_workspace)
+    return _CHAT_WORKSPACE
+
+
 def prepare_workspace(
     header_workspace: str | None,
-) -> tuple[str, tempfile.TemporaryDirectory[str] | None]:
+) -> tuple[str, None]:
     if header_workspace:
         path = os.path.abspath(header_workspace)
         if not os.path.isdir(path):
@@ -501,8 +638,7 @@ def prepare_workspace(
             )
         return path, None
     if CHAT_ONLY:
-        tmp = tempfile.TemporaryDirectory(prefix="cursor-openai-bridge-")
-        return tmp.name, tmp
+        return str(get_chat_workspace()), None
     return os.getcwd(), None
 
 
@@ -531,8 +667,14 @@ def agent_env() -> dict[str, str]:
 @app.get("/health")
 async def health() -> dict[str, Any]:
     agent_path = shutil.which(AGENT_BIN)
+    chat_ws = str(_CHAT_WORKSPACE) if _CHAT_WORKSPACE is not None else None
+    if CHAT_ONLY and chat_ws is None and not DEFAULT_WORKSPACE:
+        chat_ws = str(Path(tempfile.gettempdir()) / "cursor-openai-bridge-chat")
     return {
         "ok": True,
+        "version": APP_VERSION,
+        "backend": BACKEND,
+        "sdk_bridge_ready": _SDK_CLIENT is not None,
         "config_path": str(CONFIG_PATH),
         "config_loaded": CONFIG_PATH.is_file(),
         "api_key_configured": bool(CURSOR_API_KEY),
@@ -541,6 +683,10 @@ async def health() -> dict[str, Any]:
         "agent_path": agent_path,
         "default_mode": DEFAULT_MODE,
         "chat_only": CHAT_ONLY,
+        "chat_workspace": chat_ws,
+        "reuse_workers": REUSE_WORKERS and not FORCE_KILL_WORKERS,
+        "force_kill_workers": FORCE_KILL_WORKERS,
+        "max_concurrent": MAX_CONCURRENT,
     }
 
 
@@ -609,8 +755,22 @@ async def chat_completions(
             detail="X-Cursor-Mode must be one of: ask, plan, agent",
         )
 
-    workspace, tmp = prepare_workspace(x_cursor_workspace)
+    workspace, _ = prepare_workspace(x_cursor_workspace)
     prompt = messages_to_prompt(body.messages)
+    env = bridge_env(request)
+    api_key = env.get("CURSOR_API_KEY") or CURSOR_API_KEY
+    if not api_key:
+        raise HTTPException(status_code=401, detail="CURSOR_API_KEY not configured")
+
+    if BACKEND == "sdk":
+        return await _chat_via_sdk(
+            body=body,
+            prompt=prompt,
+            workspace=workspace,
+            api_key=api_key,
+            mode=mode,
+        )
+
     cmd = build_agent_cmd(
         prompt=prompt,
         model=body.model,
@@ -618,34 +778,141 @@ async def chat_completions(
         workspace=workspace,
         stream=body.stream,
     )
-    env = bridge_env(request)
+    estimate_headers = {"X-Cursor-Bridge-Token-Estimate": "1", "X-Cursor-Bridge-Backend": "cli"}
+
+    if body.stream:
+
+        async def _gen() -> AsyncIterator[str]:
+            async for chunk in stream_agent_sse(cmd, env, body.model):
+                yield chunk
+
+        return StreamingResponse(
+            _gen(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+                **estimate_headers,
+            },
+        )
+
+    result = await run_agent_json(cmd, env)
+    text = sanitize_assistant_text(str(result.get("result") or ""))
+    payload = openai_completion_response(
+        model=body.model,
+        text=text,
+        prompt_text=prompt,
+    )
+    estimated = payload.pop("_token_estimate", True)
+    headers = {**estimate_headers}
+    if not estimated:
+        headers.pop("X-Cursor-Bridge-Token-Estimate", None)
+    return JSONResponse(payload, headers=headers)
+
+
+async def _chat_via_sdk(
+    *,
+    body: ChatCompletionRequest,
+    prompt: str,
+    workspace: str,
+    api_key: str,
+    mode: str,
+) -> Any:
+    from sdk_runtime import sdk_complete, sdk_stream_text
+
+    client = _SDK_CLIENT
+    if client is None:
+        raise HTTPException(status_code=503, detail="Cursor SDK bridge not ready")
+
+    headers_base = {"X-Cursor-Bridge-Backend": "sdk"}
+
+    if body.stream:
+        completion_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
+        created = int(time.time())
+
+        async def _gen() -> AsyncIterator[str]:
+            yield sse_chunk(
+                model=body.model,
+                completion_id=completion_id,
+                created=created,
+                delta={"role": "assistant"},
+            )
+            emitted = False
+            try:
+                async with agent_sem():
+                    async for piece in sdk_stream_text(
+                        client=client,
+                        api_key=api_key,
+                        prompt=prompt,
+                        model=body.model,
+                        workspace=workspace,
+                        chat_only=CHAT_ONLY,
+                        mode=mode,
+                    ):
+                        text = sanitize_assistant_text(piece) if not emitted else piece
+                        if not text:
+                            continue
+                        emitted = True
+                        yield sse_chunk(
+                            model=body.model,
+                            completion_id=completion_id,
+                            created=created,
+                            delta={"content": text},
+                        )
+            except Exception as exc:
+                yield sse_chunk(
+                    model=body.model,
+                    completion_id=completion_id,
+                    created=created,
+                    delta={"content": f"\n\n[cursor-bridge sdk error] {exc}"},
+                )
+            yield sse_chunk(
+                model=body.model,
+                completion_id=completion_id,
+                created=created,
+                delta={},
+                finish_reason="stop",
+            )
+            yield "data: [DONE]\n\n"
+
+        return StreamingResponse(
+            _gen(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+                **headers_base,
+            },
+        )
 
     try:
-        if body.stream:
-            async def _gen() -> AsyncIterator[str]:
-                try:
-                    async for chunk in stream_agent_sse(cmd, env, body.model):
-                        yield chunk
-                finally:
-                    if tmp is not None:
-                        tmp.cleanup()
-
-            return StreamingResponse(
-                _gen(),
-                media_type="text/event-stream",
-                headers={
-                    "Cache-Control": "no-cache",
-                    "Connection": "keep-alive",
-                    "X-Accel-Buffering": "no",
-                },
+        async with agent_sem():
+            text, usage = await sdk_complete(
+                client=client,
+                api_key=api_key,
+                prompt=prompt,
+                model=body.model,
+                workspace=workspace,
+                chat_only=CHAT_ONLY,
+                mode=mode,
             )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-        result = await run_agent_json(cmd, env)
-        text = str(result.get("result") or "")
-        return JSONResponse(openai_completion_response(model=body.model, text=text))
-    finally:
-        if tmp is not None and not body.stream:
-            tmp.cleanup()
+    text = sanitize_assistant_text(text)
+    payload = openai_completion_response(
+        model=body.model,
+        text=text,
+        prompt_text=prompt,
+        usage=usage,
+    )
+    estimated = payload.pop("_token_estimate", True)
+    headers = {**headers_base}
+    if estimated:
+        headers["X-Cursor-Bridge-Token-Estimate"] = "1"
+    return JSONResponse(payload, headers=headers)
 
 
 def main() -> None:

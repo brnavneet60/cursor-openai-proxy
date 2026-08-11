@@ -1,0 +1,89 @@
+{
+  "thesis": "Agentgateway UC-6 rate-limits Vercel /v1; Cursor /cursor stays available. Failover proves LLM PoCs continue without buying Vercel credits.",
+  "policy": {
+    "name": "uc6-llm-rate-limit",
+    "targets": [
+      "vercel-llm-v1",
+      "vercel-llm"
+    ],
+    "not_targeted": [
+      "cursor-llm"
+    ],
+    "limit": "3 requests / minute, burst 1"
+  },
+  "saw_429_on_v1": true,
+  "cursor_ok_after_429": true,
+  "vercel_attempts": [
+    {
+      "path": "http://192.168.64.2:8090/v1/chat/completions",
+      "status": 200,
+      "total_ms": 2026.9,
+      "ok": true,
+      "preview": "ok",
+      "error": ""
+    },
+    {
+      "path": "http://192.168.64.2:8090/v1/chat/completions",
+      "status": 200,
+      "total_ms": 2007.8,
+      "ok": true,
+      "preview": "ok",
+      "error": ""
+    },
+    {
+      "path": "http://192.168.64.2:8090/v1/chat/completions",
+      "status": 200,
+      "total_ms": 6443.3,
+      "ok": true,
+      "preview": "ok",
+      "error": ""
+    },
+    {
+      "path": "http://192.168.64.2:8090/v1/chat/completions",
+      "status": 200,
+      "total_ms": 2287.2,
+      "ok": true,
+      "preview": "ok",
+      "error": ""
+    },
+    {
+      "path": "http://192.168.64.2:8090/v1/chat/completions",
+      "status": 429,
+      "total_ms": 8.7,
+      "ok": false,
+      "preview": "",
+      "error": "rate limit exceeded"
+    }
+  ],
+  "cursor_attempt": {
+    "path": "http://192.168.64.2:8090/cursor/chat/completions",
+    "status": 200,
+    "total_ms": 3675.3,
+    "ok": true,
+    "preview": "ok",
+    "error": ""
+  },
+  "failover_demo": {
+    "used": "cursor-/cursor",
+    "failover_reason": "HTTP 429 on /v1 (gateway and/or Vercel free tier)",
+    "attempts": [
+      {
+        "path": "http://192.168.64.2:8090/v1/chat/completions",
+        "status": 429,
+        "total_ms": 2.0,
+        "ok": false,
+        "preview": "",
+        "error": "rate limit exceeded"
+      },
+      {
+        "path": "http://192.168.64.2:8090/cursor/chat/completions",
+        "status": 200,
+        "total_ms": 3898.0,
+        "ok": true,
+        "preview": "Hello to you.",
+        "error": ""
+      }
+    ]
+  },
+  "pass": true
+}

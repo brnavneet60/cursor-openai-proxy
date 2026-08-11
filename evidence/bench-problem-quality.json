@@ -1,0 +1,185 @@
+{
+  "gateway": "http://192.168.64.2:8090",
+  "runs": 2,
+  "prompt": "problem",
+  "prompt_text": "You are debugging a KAIF cluster. Clients call agentgateway at POST /v1/chat/completions. After a few successes they get HTTP 429. An AgentgatewayPolicy applies a rate limit of 3 requests per minute with burst 1 on path prefix /v1.\n\nRespond with EXACTLY these four labeled sections and nothing else:\nROOT_CAUSE: <one sentence>\nCONFIRM: <one kubectl or curl command>\nFIX: <smallest durable fix in one sentence or a tiny YAML snippet>\nWORKAROUND: <one sentence for a load test that must stay under the limit>\n",
+  "stream": false,
+  "delay_s": 25.0,
+  "results": {
+    "vercel-/v1": [
+      {
+        "name": "vercel-/v1",
+        "ok": true,
+        "total_ms": 20491.8,
+        "ttft_ms": null,
+        "completion_tokens": 1535,
+        "prompt_tokens": 128,
+        "tok_per_s": 74.91,
+        "chars": 624,
+        "error": "",
+        "preview": "ROOT_CAUSE: An AgentgatewayPolicy on the /v1 path prefix is enforcing a 3 requests/minute with burst 1 rate limit, causi",
+        "content": "ROOT_CAUSE: An AgentgatewayPolicy on the /v1 path prefix is enforcing a 3 requests/minute with burst 1 rate limit, causing 429s after the allowed requests are used.\n\nCONFIRM: kubectl get agentgatewaypolicy -A -o yaml | sed -n '/rateLimit:/,+3p'\n\nFIX: Apply a higher rate limit for /v1 (example YAML):\napiVersion: kaif/v1\nkind: AgentgatewayPolicy\nmetadata:\n  name: agentgateway-policy\nspec:\n  pathPrefix: /v1\n  rateLimit:\n    requestsPerMinute: 300\n    burst: 50\n\nWORKAROUND: For a load test, pace requests to at most 3 per minute (\u2248 one request every 20 seconds) and avoid concurrent requests to /v1 to stay under the limit."
+      },
+      {
+        "name": "vercel-/v1",
+        "ok": true,
+        "total_ms": 20825.7,
+        "ttft_ms": null,
+        "completion_tokens": 1771,
+        "prompt_tokens": 128,
+        "tok_per_s": 85.04,
+        "chars": 614,
+        "error": "",
+        "preview": "ROOT_CAUSE: Too-strict AgentgatewayPolicy rate limit of 3 requests per minute with burst 1 on path prefix /v1 is throttl",
+        "content": "ROOT_CAUSE: Too-strict AgentgatewayPolicy rate limit of 3 requests per minute with burst 1 on path prefix /v1 is throttling clients, causing HTTP 429 after a few successes.\nCONFIRM: curl -i -X POST http://agentgateway.kaif-system.svc.cluster.local/v1/chat/completions -H 'Content-Type: application/json' -d '{}'\nFIX: Increase the AgentgatewayPolicy rate limit to match expected load (e.g., update the policy to 300 requests/minute with burst 20) by updating the policy spec.\nWORKAROUND: Run your load test at or below 3 requests per minute (e.g., one request every 20 seconds) and avoid concurrent bursts beyond 1."
+      }
+    ],
+    "cursor-/cursor": [
+      {
+        "name": "cursor-/cursor",
+        "ok": true,
+        "total_ms": 22093.6,
+        "ttft_ms": null,
+        "completion_tokens": 152,
+        "prompt_tokens": 0,
+        "tok_per_s": 6.88,
+        "chars": 608,
+        "error": "",
+        "preview": "I'll inspect the workspace for the AgentgatewayPolicy and rate-limit config so the four sections match this cluster.ROOT",
+        "content": "I'll inspect the workspace for the AgentgatewayPolicy and rate-limit config so the four sections match this cluster.ROOT_CAUSE: Clients exceed the AgentgatewayPolicy limit of 3 req/min (burst 1) on path prefix `/v1`, so later `/v1/chat/completions` calls are rejected with HTTP 429.\nCONFIRM: `kubectl get agentgatewaypolicy -A -o yaml | grep -A20 -i ratelimit`\nFIX: Raise the policy\u2019s rate (and/or burst) for `/v1`, e.g. `rate: 60` / `burst: 10`, and apply the updated AgentgatewayPolicy.\nWORKAROUND: Pace the load test to at most 3 requests per minute (e.g. one call every ~20s) so you stay under the limit."
+      },
+      {
+        "name": "cursor-/cursor",
+        "ok": true,
+        "total_ms": 18075.1,
+        "ttft_ms": null,
+        "completion_tokens": 143,
+        "prompt_tokens": 0,
+        "tok_per_s": 7.91,
+        "chars": 572,
+        "error": "",
+        "preview": "I'll check the workspace for the AgentgatewayPolicy and rate-limit config so the four sections match this cluster.ROOT_C",
+        "content": "I'll check the workspace for the AgentgatewayPolicy and rate-limit config so the four sections match this cluster.ROOT_CAUSE: The AgentgatewayPolicy\u2019s 3 req/min limit with burst 1 on path prefix `/v1` is rejecting excess `POST /v1/chat/completions` calls with HTTP 429.\nCONFIRM: `kubectl get agentgatewaypolicy -A -o yaml | grep -A20 -i ratelimit`\nFIX: Raise or remove the `/v1` rateLimit in the AgentgatewayPolicy (e.g. `requestsPerUnit: 60`, `unit: minute`, `burst: 10`).\nWORKAROUND: Cap the load test to at most 3 requests per rolling minute (and avoid bursts above 1)."
+      }
+    ]
+  },
+  "summary": [
+    {
+      "label": "vercel-/v1",
+      "n_ok": 2,
+      "n_fail": 0,
+      "total_ms_mean": 20658.8,
+      "total_ms_p50": 20658.8,
+      "total_ms_min": 20491.8,
+      "total_ms_max": 20825.7,
+      "tok_per_s_mean": 79.97,
+      "tok_per_s_p50": 79.97,
+      "completion_tokens_mean": 1653
+    },
+    {
+      "label": "cursor-/cursor",
+      "n_ok": 2,
+      "n_fail": 0,
+      "total_ms_mean": 20084.3,
+      "total_ms_p50": 20084.3,
+      "total_ms_min": 18075.1,
+      "total_ms_max": 22093.6,
+      "tok_per_s_mean": 7.39,
+      "tok_per_s_p50": 7.39,
+      "completion_tokens_mean": 147.5
+    }
+  ],
+  "quality": {
+    "vercel-/v1": {
+      "quality_score_mean": 1.0,
+      "structure_score_mean": 1.0,
+      "runs": [
+        {
+          "sections_present": [
+            "ROOT_CAUSE",
+            "CONFIRM",
+            "FIX",
+            "WORKAROUND"
+          ],
+          "structure_score": 1.0,
+          "hint_score": 1.0,
+          "quality_score": 1.0,
+          "hints": {
+            "mentions_rate_limit": true,
+            "confirm_looks_like_cmd": true,
+            "fix_mentions_policy": true,
+            "workaround_mentions_spacing": true
+          },
+          "total_ms": 20491.8
+        },
+        {
+          "sections_present": [
+            "ROOT_CAUSE",
+            "CONFIRM",
+            "FIX",
+            "WORKAROUND"
+          ],
+          "structure_score": 1.0,
+          "hint_score": 1.0,
+          "quality_score": 1.0,
+          "hints": {
+            "mentions_rate_limit": true,
+            "confirm_looks_like_cmd": true,
+            "fix_mentions_policy": true,
+            "workaround_mentions_spacing": true
+          },
+          "total_ms": 20825.7
+        }
+      ]
+    },
+    "cursor-/cursor": {
+      "quality_score_mean": 1.0,
+      "structure_score_mean": 1.0,
+      "runs": [
+        {
+          "sections_present": [
+            "ROOT_CAUSE",
+            "CONFIRM",
+            "FIX",
+            "WORKAROUND"
+          ],
+          "structure_score": 1.0,
+          "hint_score": 1.0,
+          "quality_score": 1.0,
+          "hints": {
+            "mentions_rate_limit": true,
+            "confirm_looks_like_cmd": true,
+            "fix_mentions_policy": true,
+            "workaround_mentions_spacing": true
+          },
+          "total_ms": 22093.6
+        },
+        {
+          "sections_present": [
+            "ROOT_CAUSE",
+            "CONFIRM",
+            "FIX",
+            "WORKAROUND"
+          ],
+          "structure_score": 1.0,
+          "hint_score": 1.0,
+          "quality_score": 1.0,
+          "hints": {
+            "mentions_rate_limit": true,
+            "confirm_looks_like_cmd": true,
+            "fix_mentions_policy": true,
+            "workaround_mentions_spacing": true
+          },
+          "total_ms": 18075.1
+        }
+      ]
+    }
+  },
+  "notes": [
+    "Cursor bridge often reports usage tokens as 0; tok_per_s may use len(content)/4 estimate.",
+    "Vercel /v1 may be rate-limited (e.g. 3/min) by agentgateway policy \u2014 delay between runs.",
+    "Paths are not identical models: gpt-5-mini vs Cursor auto/agent harness \u2014 compare carefully.",
+    "Cursor path includes CLI + agent harness overhead on top of model latency.",
+    "problem prompt quality_score is a lightweight structure+keyword rubric, not human eval."
+  ]
+}

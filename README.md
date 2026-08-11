@@ -120,9 +120,12 @@ Priority for most settings: **environment variable → `config.yaml` → default
 | Port | `PORT` | `8765` |
 | Mode | `CURSOR_BRIDGE_MODE` | `ask` |
 | Chat-only temp workspace | `CURSOR_BRIDGE_CHAT_ONLY` | `true` |
+| Backend (`sdk` \| `cli`) | `CURSOR_BRIDGE_BACKEND` | `sdk` |
 | Agent binary | `CURSOR_AGENT_BIN` | `agent` |
 | Agent timeout (seconds) | `CURSOR_BRIDGE_AGENT_TIMEOUT` | `120` |
 | Max concurrent agent runs | `CURSOR_BRIDGE_MAX_CONCURRENT` | `1` |
+| Reuse Cursor workers (warm, cli) | `CURSOR_BRIDGE_REUSE_WORKERS` | `true` |
+| Force kill workers every request | `CURSOR_BRIDGE_FORCE_KILL_WORKERS` | `false` |
 | Config file path | `CURSOR_BRIDGE_CONFIG` | `./config.yaml` |
 
 See [`config.example.yaml`](config.example.yaml).
@@ -132,11 +135,11 @@ See [`config.example.yaml`](config.example.yaml).
 ## Docker
 
 ```bash
-docker build -t cursor-openai-proxy:0.1.3 .
+docker build -t cursor-openai-proxy:0.2.0 .
 docker run --rm -p 8765:8765 \
   -e CURSOR_API_KEY \
   -e HOST=0.0.0.0 \
-  cursor-openai-proxy:0.1.3
+  cursor-openai-proxy:0.2.0
 ```
 
 The image installs the Cursor CLI via the [official installer](https://cursor.com/docs/cli/installation) (`curl | bash`). Review that script for production supply-chain hardening.
@@ -182,12 +185,12 @@ export CURSOR_API_KEY=cursor_...   # Dashboard → Integrations
 kubectl create namespace cursor-bridge --dry-run=client -o yaml | kubectl apply -f -
 
 # kind / Rancher Desktop: load the local image first
-kind load docker-image cursor-openai-proxy:0.1.3   # if using kind
+kind load docker-image cursor-openai-proxy:0.2.0   # if using kind
 
 helm upgrade --install cursor-bridge ./chart \
   --namespace cursor-bridge \
   --set image.repository=cursor-openai-proxy \
-  --set image.tag=0.1.3 \
+  --set image.tag=0.2.0 \
   --set cursor.existingSecret=cursor-api \   # preferred
   --set cursor.existingSecretKey=cursor-api-key
 ```
@@ -205,7 +208,7 @@ Or one-shot (key lands in Helm values history):
 helm upgrade --install cursor-bridge ./chart \
   --namespace cursor-bridge \
   --set image.repository=cursor-openai-proxy \
-  --set image.tag=0.1.3 \
+  --set image.tag=0.2.0 \
   --set-string cursor.apiKey="$CURSOR_API_KEY"
 ```
 

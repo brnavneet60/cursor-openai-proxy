@@ -1,0 +1,13 @@
+{
+  "note": "cursor-only via gateway; run1 often cold after idle",
+  "runs_ms": [
+    10744.000917000001,
+    9328.151959,
+    9988.244834,
+    9348.344292,
+    12216.023
+  ],
+  "warm_mean_ms": 10220.19102125,
+  "warm_p50_ms": 9668.294563,
+  "baseline_r2_cursor_mean_ms": 10244.8
+}

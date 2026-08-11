@@ -1,0 +1,120 @@
+{
+  "gateway": "http://192.168.64.2:8090",
+  "runs": 3,
+  "prompt": "short",
+  "prompt_text": "Reply with exactly one sentence about Kubernetes.",
+  "stream": false,
+  "delay_s": 22.0,
+  "results": {
+    "vercel-/v1": [
+      {
+        "name": "vercel-/v1",
+        "ok": true,
+        "total_ms": 3491.8,
+        "ttft_ms": null,
+        "completion_tokens": 149,
+        "prompt_tokens": 14,
+        "tok_per_s": 42.67,
+        "chars": 147,
+        "error": "",
+        "preview": "Kubernetes is an open-source container orchestration platform that automates the deployment, scaling, and management of "
+      },
+      {
+        "name": "vercel-/v1",
+        "ok": true,
+        "total_ms": 5672.7,
+        "ttft_ms": null,
+        "completion_tokens": 164,
+        "prompt_tokens": 14,
+        "tok_per_s": 28.91,
+        "chars": 171,
+        "error": "",
+        "preview": "Kubernetes is an open-source container orchestration platform that automates deployment, scaling, and management of cont"
+      },
+      {
+        "name": "vercel-/v1",
+        "ok": true,
+        "total_ms": 2053.8,
+        "ttft_ms": null,
+        "completion_tokens": 114,
+        "prompt_tokens": 14,
+        "tok_per_s": 55.51,
+        "chars": 147,
+        "error": "",
+        "preview": "Kubernetes is an open-source container orchestration platform that automates the deployment, scaling, and management of "
+      }
+    ],
+    "cursor-/cursor": [
+      {
+        "name": "cursor-/cursor",
+        "ok": true,
+        "total_ms": 18187.6,
+        "ttft_ms": null,
+        "completion_tokens": 29,
+        "prompt_tokens": 106,
+        "tok_per_s": 1.59,
+        "chars": 119,
+        "error": "",
+        "preview": "Kubernetes is an open-source platform for automating deployment, scaling, and management of containerized applications."
+      },
+      {
+        "name": "cursor-/cursor",
+        "ok": true,
+        "total_ms": 9319.4,
+        "ttft_ms": null,
+        "completion_tokens": 35,
+        "prompt_tokens": 106,
+        "tok_per_s": 3.76,
+        "chars": 141,
+        "error": "",
+        "preview": "Kubernetes is an open-source platform that automates deploying, scaling, and managing containerized applications across "
+      },
+      {
+        "name": "cursor-/cursor",
+        "ok": true,
+        "total_ms": 9628.6,
+        "ttft_ms": null,
+        "completion_tokens": 37,
+        "prompt_tokens": 106,
+        "tok_per_s": 3.84,
+        "chars": 148,
+        "error": "",
+        "preview": "Kubernetes is an open-source platform for automating the deployment, scaling, and management of containerized applicatio"
+      }
+    ]
+  },
+  "summary": [
+    {
+      "label": "vercel-/v1",
+      "n_ok": 3,
+      "n_fail": 0,
+      "total_ms_mean": 3739.4,
+      "total_ms_p50": 3491.8,
+      "total_ms_min": 2053.8,
+      "total_ms_max": 5672.7,
+      "tok_per_s_mean": 42.36,
+      "tok_per_s_p50": 42.67,
+      "completion_tokens_mean": 142.3
+    },
+    {
+      "label": "cursor-/cursor",
+      "n_ok": 3,
+      "n_fail": 0,
+      "total_ms_mean": 12378.5,
+      "total_ms_p50": 9628.6,
+      "total_ms_min": 9319.4,
+      "total_ms_max": 18187.6,
+      "tok_per_s_mean": 3.06,
+      "tok_per_s_p50": 3.76,
+      "completion_tokens_mean": 33.7
+    }
+  ],
+  "quality": {},
+  "notes": [
+    "Cursor bridge often reports usage tokens as 0; tok_per_s may use len(content)/4 estimate.",
+    "Vercel /v1 may be rate-limited (e.g. 3/min) by agentgateway policy \u2014 delay between runs.",
+    "Paths are not identical models: gpt-5-mini vs Cursor auto/agent harness \u2014 compare carefully.",
+    "Cursor path includes CLI + agent harness overhead on top of model latency.",
+    "problem prompt quality_score is a lightweight structure+keyword rubric, not human eval."
+  ]
+}
