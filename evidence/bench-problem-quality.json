@@ -1,5 +1,5 @@
 {
-  "gateway": "http://192.168.64.2:8090",
+  "gateway": "http://GATEWAY_LB:8090",
   "runs": 2,
   "prompt": "problem",
   "prompt_text": "You are debugging a KAIF cluster. Clients call agentgateway at POST /v1/chat/completions. After a few successes they get HTTP 429. An AgentgatewayPolicy applies a rate limit of 3 requests per minute with burst 1 on path prefix /v1.\n\nRespond with EXACTLY these four labeled sections and nothing else:\nROOT_CAUSE: <one sentence>\nCONFIRM: <one kubectl or curl command>\nFIX: <smallest durable fix in one sentence or a tiny YAML snippet>\nWORKAROUND: <one sentence for a load test that must stay under the limit>\n",

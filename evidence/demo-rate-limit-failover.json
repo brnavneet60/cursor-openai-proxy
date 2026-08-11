@@ -15,7 +15,7 @@
   "cursor_ok_after_429": true,
   "vercel_attempts": [
     {
-      "path": "http://192.168.64.2:8090/v1/chat/completions",
+      "path": "http://GATEWAY_LB:8090/v1/chat/completions",
       "status": 200,
       "total_ms": 2026.9,
       "ok": true,
@@ -23,7 +23,7 @@
       "error": ""
     },
     {
-      "path": "http://192.168.64.2:8090/v1/chat/completions",
+      "path": "http://GATEWAY_LB:8090/v1/chat/completions",
       "status": 200,
       "total_ms": 2007.8,
       "ok": true,
@@ -31,7 +31,7 @@
       "error": ""
     },
     {
-      "path": "http://192.168.64.2:8090/v1/chat/completions",
+      "path": "http://GATEWAY_LB:8090/v1/chat/completions",
       "status": 200,
       "total_ms": 6443.3,
       "ok": true,
@@ -39,7 +39,7 @@
       "error": ""
     },
     {
-      "path": "http://192.168.64.2:8090/v1/chat/completions",
+      "path": "http://GATEWAY_LB:8090/v1/chat/completions",
       "status": 200,
       "total_ms": 2287.2,
       "ok": true,
@@ -47,7 +47,7 @@
       "error": ""
     },
     {
-      "path": "http://192.168.64.2:8090/v1/chat/completions",
+      "path": "http://GATEWAY_LB:8090/v1/chat/completions",
       "status": 429,
       "total_ms": 8.7,
       "ok": false,
@@ -56,7 +56,7 @@
     }
   ],
   "cursor_attempt": {
-    "path": "http://192.168.64.2:8090/cursor/chat/completions",
+    "path": "http://GATEWAY_LB:8090/cursor/chat/completions",
     "status": 200,
     "total_ms": 3675.3,
     "ok": true,
@@ -68,7 +68,7 @@
     "failover_reason": "HTTP 429 on /v1 (gateway and/or Vercel free tier)",
     "attempts": [
       {
-        "path": "http://192.168.64.2:8090/v1/chat/completions",
+        "path": "http://GATEWAY_LB:8090/v1/chat/completions",
         "status": 429,
         "total_ms": 2.0,
         "ok": false,
@@ -76,7 +76,7 @@
         "error": "rate limit exceeded"
       },
       {
-        "path": "http://192.168.64.2:8090/cursor/chat/completions",
+        "path": "http://GATEWAY_LB:8090/cursor/chat/completions",
         "status": 200,
         "total_ms": 3898.0,
         "ok": true,

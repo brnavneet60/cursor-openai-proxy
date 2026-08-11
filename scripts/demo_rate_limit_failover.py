@@ -11,7 +11,7 @@ Vercel AI Gateway credits (uses existing Cursor Pro usage via the bridge).
 
 Example:
   python scripts/demo_rate_limit_failover.py \\
-    --gateway http://192.168.64.2:8090 \\
+    --gateway http://<AGENTGATEWAY_LB>:8090 \\
     --out evidence/demo-rate-limit-failover.json
 """
 

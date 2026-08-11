@@ -13,7 +13,7 @@ Docs: https://agentgateway.dev/docs/kubernetes/latest/llm/failover/
 
 Example:
   python scripts/demo_gateway_failover.py \\
-    --gateway http://192.168.64.2:8090 \\
+    --gateway http://<AGENTGATEWAY_LB>:8090 \\
     --out evidence/demo-gateway-failover.json
 """
 
@@ -127,7 +127,7 @@ spec:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--gateway", default="http://192.168.64.2:8090")
+    ap.add_argument("--gateway", default="http://<AGENTGATEWAY_LB>:8090")
     ap.add_argument("--timeout", type=float, default=180.0)
     ap.add_argument(
         "--force-failover-test",
